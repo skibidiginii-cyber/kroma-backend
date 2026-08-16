@@ -5,9 +5,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import yt_dlp
 
-app = FastAPI(title="KromaAudio Aggregator Backend", version="1.0.0")
+app = FastAPI(title="KromaAudio Engine", version="1.0.0")
 
-# Разрешаем запросы от Android-приложения (CORS)
+# Разрешаем все CORS запросы
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -29,22 +29,43 @@ class TrackResponse(BaseModel):
     stream_url: str
 
 
-@app.get("/")
+class VersionResponse(BaseModel):
+    version_code: int
+    version_name: str
+    apk_url: str
+    force_update: bool
+    changelog: str
+
+
+# Разрешаем и GET, и HEAD на корневой адрес, чтобы не было ошибки 405 Method Not Allowed
+@app.api_route("/", methods=["GET", "HEAD"])
 def read_root():
-    return {"status": "ok", "service": "KromaAudio Aggregator Engine"}
+    return {"status": "ok", "service": "KromaAudio Engine Running"}
+
+
+@app.get("/api/version", response_model=VersionResponse)
+def get_version():
+    return VersionResponse(
+        version_code=1,
+        version_name="0.6.0",
+        apk_url="https://drive.google.com/file/d/1mGm17EtTJvQkcWrLWP0rmbBOb502eujT/view?usp=sharing",  # или ссылка на GitHub Release
+        force_update=False,
+        changelog="Стабильный релиз KromaAudio, интеграция поиска и оффлайн библиотеки."
+    )
 
 
 @app.get("/api/search", response_model=List[TrackResponse])
 def search_tracks(q: str = Query(..., min_length=1, description="Search query")):
-    """Ищет треки через yt-dlp на YouTube/SoundCloud и извлекает прямые ссылки на стрим"""
     ydl_opts = {
         'format': 'bestaudio/best',
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
-        'default_search': 'ytsearch5',  # Возвращает топ-5 результатов с YouTube
+        'default_search': 'ytsearch5',
         'extract_flat': False,
         'source_address': '0.0.0.0',
+        'socket_timeout': 10,
+        'ignoreerrors': True,
     }
 
     results = []
@@ -60,20 +81,16 @@ def search_tracks(q: str = Query(..., min_length=1, description="Search query"))
                 if not entry:
                     continue
 
-                # Достаем прямую ссылку на аудиопоток без сохранения на диск
                 stream_url = entry.get('url')
                 if not stream_url:
                     continue
 
-                # Извлекаем обложку наивысшего качества
                 thumbnails = entry.get('thumbnails', [])
                 artwork_url = thumbnails[-1].get('url') if thumbnails else None
 
-                # Парсим название и исполнителя
                 title = entry.get('title', 'Unknown Track')
                 uploader = entry.get('uploader') or entry.get('channel') or 'Unknown Artist'
 
-                # Если в названии есть разделитель "Artist - Title", пытаемся разобрать
                 if ' - ' in title:
                     parts = title.split(' - ', 1)
                     artist_name = parts[0].strip()
@@ -84,7 +101,7 @@ def search_tracks(q: str = Query(..., min_length=1, description="Search query"))
 
                 results.append(
                     TrackResponse(
-                        id=entry.get('id', ''),
+                        id=str(entry.get('id', '')),
                         title=track_title,
                         artist=artist_name,
                         duration_sec=int(entry.get('duration') or 0),
@@ -98,10 +115,3 @@ def search_tracks(q: str = Query(..., min_length=1, description="Search query"))
     except Exception as e:
         logger.error(f"Error extracting stream for query '{q}': {e}")
         raise HTTPException(status_code=500, detail=f"Failed to search tracks: {str(e)}")
-
-
-if __name__ == "__main__":
-    import uvicorn
-
-    # Запуск сервера на локальном порту 8000
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
