@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import yt_dlp
 
-app = FastAPI(title="KromaAudio Engine", version="1.1.0")
+app = FastAPI(title="KromaAudio Engine", version="0.6.1")
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,9 +64,9 @@ def read_root():
 @app.get("/api/version", response_model=VersionResponse)
 def get_version():
     return VersionResponse(
-        version_code=1,
-        version_name="0.6.0",
-        apk_url="https://drive.google.com/file/d/1mGm17EtTJvQkcWrLWP0rmbBOb502eujT/view?usp=sharing",
+        version_code=3,
+        version_name="0.6.1",
+        apk_url="https://github.com/skibidiginii-cyber/kroma-backend/releases/download/v0.6.0%D0%97_on_publish/KromaAudio.apk",
         force_update=False,
         changelog="Оптимизация скорости поиска и фикс получения аудиопотока."
     )
